@@ -14,6 +14,7 @@ from .config import settings
 from .cost_guard import check_budget, get_usage, record_usage
 from .rate_limiter import check_rate_limit
 from utils.mock_llm import ask as mock_ask
+from app.ui import render_home
 
 
 logging.basicConfig(
@@ -112,10 +113,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    lifespan=lifespan,
+
 )
+
+@app.get("/", include_in_schema=False)
+async def home():
+    return render_home()
+
 
 
 @app.middleware("http")
@@ -126,18 +130,6 @@ async def track_in_flight_requests(request, call_next):
         return await call_next(request)
     finally:
         _in_flight_requests -= 1
-
-
-@app.get("/")
-def root():
-    return {
-        "app": settings.app_name,
-        "version": settings.app_version,
-        "environment": settings.environment,
-        "docs": "/docs",
-        "health": "/health",
-        "ready": "/ready",
-    }
 
 
 @app.get("/health")
