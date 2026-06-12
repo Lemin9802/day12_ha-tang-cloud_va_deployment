@@ -393,3 +393,133 @@ Redis-based implementation idea:
         return True
 
 Conclusion: cost guard prevents unexpected LLM spending by checking estimated cost before processing requests and tracking usage in shared storage such as Redis.
+
+## Part 5: Scaling & Reliability
+
+### Exercise 5.1 — Health checks
+
+The app implements two health-related endpoints:
+
+- `/health`: liveness probe.
+- `/ready`: readiness probe.
+
+`/health` answers the question: "Is the process alive?"
+
+It returns:
+
+- overall status
+- uptime
+- version
+- environment
+- timestamp
+- dependency checks such as memory usage
+
+`/ready` answers the question: "Is this instance ready to receive traffic?"
+
+It returns `ready: true` when the app has finished startup and can serve requests. If the app is still starting up or shutting down, it returns `503`.
+
+Test results:
+
+- `GET /health` returned `status: ok`.
+- `GET /health` also showed memory check status as `ok`.
+- `GET /ready` returned `ready: true`.
+- `POST /ask?question=Reliability%20test` returned an agent answer.
+
+Conclusion: health and readiness checks help a cloud platform or load balancer decide whether to restart a container or route traffic to an instance.
+
+### Exercise 5.2 — Graceful shutdown
+
+The app uses FastAPI lifespan hooks and signal handling for graceful shutdown.
+
+How it works:
+
+- During startup, the app sets `_is_ready = True`.
+- During shutdown, the app sets `_is_ready = False`.
+- The app tracks active requests with `_in_flight_requests`.
+- During shutdown, the app waits for in-flight requests to complete.
+- `timeout_graceful_shutdown=30` gives the app up to 30 seconds to finish cleanly.
+- `SIGTERM` and `SIGINT` are logged so we can observe shutdown behavior.
+
+Observed shutdown logs:
+
+- `Graceful shutdown initiated`
+- `Shutdown complete`
+
+Conclusion: graceful shutdown prevents the platform from killing the process while requests are still being handled.
+
+### Exercise 5.3 — Stateless design
+
+Anti-pattern:
+
+Storing conversation history in memory is not scalable because each app instance has its own memory. If request 1 goes to instance A and request 2 goes to instance B, instance B will not see the conversation history stored in instance A.
+
+Correct design:
+
+Store conversation history in Redis.
+
+In the production scaling demo:
+
+- `save_session()` stores session data in Redis.
+- `load_session()` reads session data from Redis.
+- `append_to_history()` appends user and assistant messages to the shared session history.
+- Any agent instance can continue the same conversation because they all read from the same Redis store.
+
+Conclusion: stateless app instances can be scaled horizontally because shared state is stored outside the app process.
+
+### Exercise 5.4 — Load balancing
+
+The production stack uses:
+
+- 3 `agent` instances
+- 1 Redis container
+- 1 Nginx load balancer
+
+Architecture:
+
+User / curl
+  |
+  v
+Nginx on localhost:8080
+  |
+  v
+Agent replicas on internal Docker network
+  |
+  v
+Redis shared session store
+
+Docker Compose command used:
+
+docker compose up -d --build --scale agent=3
+
+Observed services:
+
+- `production-agent-1` healthy
+- `production-agent-2` healthy
+- `production-agent-3` healthy
+- `production-redis-1` healthy
+- `production-nginx-1` running on `localhost:8080`
+
+Load balancing test result:
+
+Requests were distributed across three instances:
+
+- `instance-7c1e6c`
+- `instance-d97f49`
+- `instance-855c5f`
+
+Each response showed `storage: redis`.
+
+Conclusion: Nginx successfully distributed traffic across multiple agent instances.
+
+### Exercise 5.5 — Test stateless
+
+The `test_stateless.py` script tested whether conversation history survives across multiple app instances.
+
+Observed result:
+
+- 5 requests were sent in the same session.
+- Requests were served by 3 different instances.
+- Conversation history still contained 10 messages.
+- The script printed: `Session history preserved across all instances via Redis`.
+
+Conclusion: the app is stateless from the perspective of the agent containers. Session state is stored in Redis, so any replica can serve the next request without losing conversation history.
