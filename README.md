@@ -515,3 +515,46 @@ Final public app:
 ```text
 https://day12-agent-railway-production.up.railway.app
 ```
+
+<!-- MAITHUYLAW_UI_UPDATE_START -->
+
+## Latest Update: MaiThuyLaw AI Web UI
+
+This project now includes a simple deployed web interface for the Day 12 production mock agent.
+
+Public app:
+
+```text
+https://day12-agent-railway-production.up.railway.app
+```
+
+The root path `/` now renders a browser-based chat UI branded as **MaiThuyLaw AI** instead of returning raw JSON. The UI calls the existing backend endpoints:
+
+```text
+GET  /health
+POST /ask
+```
+
+Current implementation status:
+
+```text
+- Backend: FastAPI Day 12 production mock agent
+- Frontend: lightweight HTML/CSS/JavaScript served by FastAPI
+- Auth: X-API-Key through the UI input
+- Deployment: Railway Docker deployment
+- Public UI: verified
+- Health check from UI: verified
+- Authenticated /ask request from UI: verified
+```
+
+Evidence screenshots:
+
+```text
+screenshots/07-public-ui-home.png
+screenshots/08-public-ui-health.png
+screenshots/09-public-ui-auth-success.png
+```
+
+Note: this UI is intentionally lightweight. The backend still uses the Day 12 mock agent. The next product step is to replace the mock logic with the real MaiThuyLaw RAG/agent backend.
+
+<!-- MAITHUYLAW_UI_UPDATE_END -->

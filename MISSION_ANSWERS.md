@@ -849,3 +849,37 @@ Evidence:
 Kết luận:
 
 Final project đã kết hợp các concept chính của Day 12: environment-based config, authentication, rate limiting, budget protection, Redis-backed state, health checks, Docker, Docker Compose và cloud deployment configuration. App đã chạy thành công ở local Docker Compose với Redis và đã deploy thành công lên Railway với public HTTPS URL.
+
+<!-- MAITHUYLAW_UI_MISSION_UPDATE_START -->
+
+## Final UI Update: MaiThuyLaw AI Public Interface
+
+After completing the original Day 12 production deployment, I added a lightweight public web UI to make the deployed agent usable from a browser.
+
+The public Railway URL now opens a branded **MaiThuyLaw AI** interface instead of raw API JSON:
+
+```text
+https://day12-agent-railway-production.up.railway.app
+```
+
+The UI provides:
+
+```text
+- API key input for X-API-Key authentication
+- User ID input for X-User-ID
+- Health check button calling GET /health
+- Chat box calling POST /ask
+- Browser-visible success and error states
+```
+
+Verified evidence:
+
+```text
+screenshots/07-public-ui-home.png
+screenshots/08-public-ui-health.png
+screenshots/09-public-ui-auth-success.png
+```
+
+This is still the Day 12 mock production agent, but it now has a user-facing interface suitable for demo and public deployment. The next upgrade path is to replace the mock agent with the real MaiThuyLaw legal/news RAG agent while keeping the same deployment structure.
+
+<!-- MAITHUYLAW_UI_MISSION_UPDATE_END -->
