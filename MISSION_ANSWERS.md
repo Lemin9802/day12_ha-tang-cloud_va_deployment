@@ -70,3 +70,131 @@ Production test results:
 - The server ran on `0.0.0.0:8000`, which is suitable for container/cloud deployment.
 
 Conclusion: the production version follows 12-factor principles better than the basic localhost version.
+
+## Part 2: Docker
+
+### Exercise 2.1 — Basic Dockerfile
+
+1. Base image là gì?
+
+The base image is `python:3.11`.
+
+This means the container starts from an official Python 3.11 image that already includes Python and common system dependencies.
+
+2. Working directory là gì?
+
+The working directory is `/app`.
+
+The line `WORKDIR /app` means all following commands such as `COPY`, `RUN`, and `CMD` will run inside `/app` in the container.
+
+3. Tại sao COPY requirements.txt trước?
+
+`requirements.txt` is copied before the application code to use Docker layer caching.
+
+Dependencies usually change less often than source code. If only `app.py` changes, Docker can reuse the cached dependency installation layer instead of running `pip install` again. This makes rebuilds faster.
+
+4. CMD vs ENTRYPOINT khác nhau thế nào?
+
+`CMD` defines the default command that runs when the container starts. It is easy to override when running `docker run`.
+
+`ENTRYPOINT` defines the main executable of the container. Arguments passed to `docker run` are usually appended to the entrypoint.
+
+For this lab, `CMD ["python", "app.py"]` is enough because the container simply starts the FastAPI app.
+
+### Exercise 2.2 — Build and run develop Docker image
+
+Build command:
+
+docker build -f 02-docker/develop/Dockerfile -t my-agent:develop .
+
+Image size observed:
+
+- DISK USAGE: 1.66GB
+- CONTENT SIZE: 424MB
+
+Run command:
+
+docker run -d --name my-agent-develop -p 8000:8000 my-agent:develop
+
+Test results:
+
+- `GET /health` returned `status: ok` and `container: true`.
+- `POST /ask?question=What%20is%20Docker%3F` returned a mock agent answer.
+- Sending JSON body to `/ask` returned a validation error because this develop version expects `question` as a query parameter.
+
+Conclusion: the develop Docker image builds and runs successfully, but it is still basic and not fully production-ready.
+
+### Exercise 2.3 — Multi-stage build
+
+Stage 1: Builder
+
+The first stage uses `python:3.11-slim AS builder`.
+
+Its job is to install build dependencies such as `gcc` and `libpq-dev`, then install Python packages from `requirements.txt` into `/root/.local`.
+
+This stage is only used during image build time. It is not the final deployed image.
+
+Stage 2: Runtime
+
+The second stage uses `python:3.11-slim AS runtime`.
+
+Its job is to run the application with only the files needed at runtime:
+
+- installed Python packages copied from the builder stage
+- application source code
+- `utils/mock_llm.py`
+
+It also creates and uses a non-root user called `appuser`, which is safer for production.
+
+Why is the image smaller?
+
+The advanced image is smaller because the final runtime stage does not include build tools, temporary build files, or unnecessary dependencies from the builder stage. Only the installed runtime packages and application files are copied into the final image.
+
+Image size comparison:
+
+| Image | Disk usage | Content size |
+|---|---:|---:|
+| `my-agent:develop` | 1.66GB | 424MB |
+| `my-agent:advanced` | 236MB | 56.6MB |
+
+Conclusion: the multi-stage production image is much smaller and more secure than the single-stage develop image.
+
+### Exercise 2.4 — Docker Compose stack
+
+Services started:
+
+- `agent`: FastAPI AI agent service.
+- `redis`: cache for sessions and rate limiting.
+- `qdrant`: vector database for RAG-style retrieval.
+- `nginx`: reverse proxy and load balancer exposed on host ports 80 and 443.
+
+Architecture diagram:
+
+User / Browser / curl
+  |
+  v
+Nginx reverse proxy on localhost:80
+  |
+  v
+Agent service on internal Docker network, port 8000
+  |
+  +--> Redis on internal Docker network, port 6379
+  |
+  +--> Qdrant on internal Docker network, port 6333
+
+How services communicate:
+
+- The user sends requests to Nginx through `localhost:80`.
+- Nginx proxies requests to the `agent` service using the Docker service name `agent:8000`.
+- The agent can connect to Redis using `redis://redis:6379/0`.
+- The agent can connect to Qdrant using `http://qdrant:6333`.
+- Redis and Qdrant are not exposed directly to the host machine; they only communicate through the internal Docker network.
+
+Test results:
+
+- `docker compose ps` showed `agent`, `redis`, and `qdrant` as healthy.
+- `GET http://localhost/health` returned `status: ok`.
+- `POST http://localhost/ask` returned a mock agent answer.
+- Nginx successfully routed requests from `localhost:80` to the internal agent service.
+
+Conclusion: the Docker Compose stack successfully runs a production-like multi-service architecture with reverse proxy, cache, vector database, and internal networking.
