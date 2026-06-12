@@ -198,3 +198,65 @@ Test results:
 - Nginx successfully routed requests from `localhost:80` to the internal agent service.
 
 Conclusion: the Docker Compose stack successfully runs a production-like multi-service architecture with reverse proxy, cache, vector database, and internal networking.
+
+## Part 3: Cloud Deployment
+
+### Exercise 3.1 — Deploy Railway
+
+Railway project:
+
+- Project name: `trustworthy-gratitude`
+- Service name: `day12-agent-railway`
+- Public URL: `https://day12-agent-railway-production.up.railway.app`
+
+Deployment result:
+
+- Railway deployment completed successfully.
+- Railway health check on `/health` succeeded.
+- The service started successfully using the Railway-provided `PORT` environment variable.
+- The app listened on `0.0.0.0`, which is required for cloud deployment.
+- Environment variables were set on Railway for `PORT`, `ENVIRONMENT`, and `AGENT_API_KEY`.
+
+Public URL test commands:
+
+curl https://day12-agent-railway-production.up.railway.app/health
+
+curl -X POST https://day12-agent-railway-production.up.railway.app/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Hello from public Railway URL"}'
+
+Observed results:
+
+- `GET /health` returned `status: ok`, `platform: Railway`, and a timestamp.
+- `POST /ask` returned the question, an agent answer, and `platform: Railway`.
+
+Conclusion: the agent was successfully deployed to Railway and is reachable through a public HTTPS URL.
+
+### Exercise 3.2 — Render vs Railway configuration
+
+Railway uses `railway.toml`, while Render uses `render.yaml`.
+
+Key differences:
+
+| Area | Railway `railway.toml` | Render `render.yaml` |
+|---|---|---|
+| Build system | Uses `builder = "NIXPACKS"`, so Railway auto-detects the Python app. | Uses explicit `runtime: python` and `buildCommand: pip install -r requirements.txt`. |
+| Start command | Uses `startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT"`. | Also uses `startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT`. |
+| Health check | Defines `healthcheckPath = "/health"` and `healthcheckTimeout = 30`. | Defines `healthCheckPath: /health`. |
+| Infrastructure definition | Focuses mainly on build and deploy behavior for one service. | Defines infrastructure more explicitly, including web service, region, plan, Redis service, and environment variables. |
+| Environment variables | Set using Railway Dashboard or Railway CLI. | Some variables are defined in `render.yaml`; secrets can be manually set in the Render Dashboard using `sync: false`, or generated with `generateValue: true`. |
+| Extra services | The Railway example only deploys the web agent service. | The Render blueprint also defines a Redis service named `agent-cache`. |
+| Auto deploy | Railway can deploy from CLI using `railway up`. | Render uses `autoDeploy: true`, so it redeploys automatically when code is pushed to GitHub. |
+| Region/plan | Not specified in `railway.toml`. | Explicitly sets `region: singapore` and `plan: free`. |
+
+Similarities:
+
+- Both platforms inject the `PORT` environment variable.
+- Both require the app to bind to `0.0.0.0`.
+- Both use `/health` as the cloud health check endpoint.
+- Both can store secrets outside the source code.
+- Both are suitable for deploying the FastAPI agent publicly.
+
+Conclusion:
+
+Railway is simpler for quick CLI-based deployment and prototypes. Render is more explicit as infrastructure-as-code because `render.yaml` can describe the web service, Redis service, region, plan, environment variables, health checks, and auto-deploy behavior in one file.
