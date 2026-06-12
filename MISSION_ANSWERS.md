@@ -523,3 +523,60 @@ Observed result:
 - The script printed: `Session history preserved across all instances via Redis`.
 
 Conclusion: the app is stateless from the perspective of the agent containers. Session state is stored in Redis, so any replica can serve the next request without losing conversation history.
+
+## Part 6: Final Project
+
+### Production-ready AI Agent
+
+I created the final production-ready AI agent at the root of the repository.
+
+Root-level files created:
+
+- `app/main.py`
+- `app/config.py`
+- `app/auth.py`
+- `app/rate_limiter.py`
+- `app/cost_guard.py`
+- `app/__init__.py`
+- `Dockerfile`
+- `docker-compose.yml`
+- `requirements.txt`
+- `.env.example`
+- `.dockerignore`
+- `railway.toml`
+
+Implemented features:
+
+- REST API endpoint: `POST /ask`
+- Conversation history
+- Redis-backed session history when Redis is available
+- API key authentication with `X-API-Key`
+- Optional user identity using `X-User-ID` or `user_id` in request body
+- Rate limiting: 10 requests per minute per user
+- Monthly cost guard: `$10/month` per user
+- Health check endpoint: `GET /health`
+- Readiness endpoint: `GET /ready`
+- Structured JSON logging
+- Dockerized app using a multi-stage Dockerfile
+- Docker Compose stack with Redis
+- Railway config with root `railway.toml`
+
+Local test results:
+
+- `GET /health` returned `200 OK`.
+- `GET /ready` returned `200 OK`.
+- `POST /ask` without API key returned `401 Unauthorized`.
+- `POST /ask` with `X-API-Key: local-dev-key` returned `200 OK`.
+- `/history` returned saved conversation history.
+- Docker Compose health check showed both `agent` and `redis` as healthy.
+- In Docker Compose, `/health` returned `storage: redis` and `redis_connected: true`.
+
+Rate limit test results:
+
+- Requests 1 to 10 returned `HTTP 200`.
+- Request 11 returned `HTTP 429`.
+- Request 12 also returned `HTTP 429`.
+
+Conclusion:
+
+The final project combines the main Day 12 deployment concepts: environment-based config, authentication, rate limiting, budget protection, Redis-backed state, health checks, Docker, Docker Compose, and cloud deployment configuration.

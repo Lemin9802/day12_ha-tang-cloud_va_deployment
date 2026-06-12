@@ -107,3 +107,30 @@ Chúng tôi đã chuẩn bị đầy đủ tài liệu hướng dẫn:
 2. **Trong lab:** Làm theo từng Part, tham khảo [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
 3. **Gặp lỗi:** Xem [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 4. **Sau lab:** Nộp Part 6 Final Project để chấm điểm
+
+## Final Project: Production AI Agent
+
+The final Day 12 project is implemented at the root of this repository.
+
+Public Railway URL:
+
+https://day12-agent-railway-production.up.railway.app
+
+Run locally with Docker Compose:
+
+    docker compose up -d --build
+
+Test health:
+
+    curl http://localhost:8000/health
+
+Test authenticated ask endpoint:
+
+    curl -X POST http://localhost:8000/ask \
+      -H "X-API-Key: local-dev-key" \
+      -H "X-User-ID: student" \
+      -H "Content-Type: application/json" \
+      -d '{"question":"Hello agent","user_id":"student"}'
+
+See DEPLOYMENT.md for deployment details and test evidence.
+
