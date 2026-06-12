@@ -260,3 +260,136 @@ Similarities:
 Conclusion:
 
 Railway is simpler for quick CLI-based deployment and prototypes. Render is more explicit as infrastructure-as-code because `render.yaml` can describe the web service, Redis service, region, plan, environment variables, health checks, and auto-deploy behavior in one file.
+
+## Part 4: API Security
+
+### Exercise 4.1 — API Key authentication
+
+Where is the API key checked?
+
+The API key is checked in the `verify_api_key()` dependency inside `04-api-gateway/develop/app.py`.
+
+The app reads the expected key from the `AGENT_API_KEY` environment variable:
+
+- Header name: `X-API-Key`
+- Expected value in my test: `secret-key-123`
+
+What happens if the key is missing or wrong?
+
+- Missing API key returned `401 Unauthorized`.
+- Wrong API key returned `403 Forbidden`.
+- Correct API key returned `200 OK` and the agent answer.
+
+Test results:
+
+- Request without `X-API-Key` returned: `Missing API key. Include header: X-API-Key: <your-key>`.
+- Request with `X-API-Key: wrong-key` returned: `Invalid API key`.
+- Request with `X-API-Key: secret-key-123` returned a successful mock agent response.
+
+How to rotate the key?
+
+To rotate the API key, update the `AGENT_API_KEY` environment variable in the deployment platform or local shell, then restart or redeploy the service. No source code change is required.
+
+Conclusion: API key authentication protects the `/ask` endpoint while keeping `/health` public for platform health checks.
+
+### Exercise 4.2 — JWT authentication
+
+JWT flow:
+
+1. The client sends username and password to `POST /auth/token`.
+2. The server verifies the credentials using `authenticate_user()`.
+3. If the credentials are valid, the server creates a JWT using `create_token()`.
+4. The JWT contains the username in `sub`, the user role in `role`, issue time in `iat`, and expiration time in `exp`.
+5. The client sends the token in future requests using the header `Authorization: Bearer <token>`.
+6. Protected endpoints use `verify_token()` to decode and validate the JWT.
+7. If the token is missing, expired, or invalid, the server rejects the request.
+
+Demo users:
+
+- `student / demo123` has role `user`.
+- `teacher / teach456` has role `admin`.
+
+JWT test result:
+
+- `POST /auth/token` with `student / demo123` returned a JWT access token.
+- `POST /ask` with `Authorization: Bearer <token>` returned `200 OK`.
+- The response included the question, mock answer, rate-limit remaining count, and budget usage.
+
+Conclusion: JWT authentication is stateless because the server can verify the signed token without storing a session for every request.
+
+### Exercise 4.3 — Rate limiting
+
+Algorithm used:
+
+The app uses a Sliding Window Counter algorithm.
+
+How it works:
+
+- Each user has a deque of request timestamps.
+- On every request, old timestamps outside the 60-second window are removed.
+- If the number of timestamps is already at the limit, the request is rejected with `429 Too Many Requests`.
+- Otherwise, the current timestamp is recorded and the request is allowed.
+
+Limits:
+
+- Normal user: 10 requests per 60 seconds.
+- Admin user: 100 requests per 60 seconds.
+
+How admin gets a higher limit:
+
+The app checks the user role from the JWT. If `role == "admin"`, it uses `rate_limiter_admin`. Otherwise, it uses `rate_limiter_user`.
+
+Rate limit test result:
+
+- Requests 1 to 10 returned `HTTP 200`.
+- Request 11 returned `HTTP 429`.
+- Request 12 also returned `HTTP 429`.
+- The error response included `Rate limit exceeded`, `limit: 10`, `window_seconds: 60`, and `retry_after_seconds`.
+
+Conclusion: rate limiting protects the public API from abuse and prevents one user from consuming too many resources.
+
+### Exercise 4.4 — Cost guard
+
+What the current cost guard does:
+
+The app uses `CostGuard` to protect LLM budget.
+
+- `check_budget(user_id)` runs before calling the LLM.
+- `record_usage(user_id, input_tokens, output_tokens)` runs after the LLM response.
+- It tracks input tokens, output tokens, request count, and estimated cost.
+- It has a per-user daily budget of `$1.00`.
+- It has a global daily budget of `$10.00`.
+- If a user exceeds their budget, the app returns `402 Payment Required`.
+- If the global budget is exceeded, the app returns `503 Service Unavailable`.
+
+Why Redis is better for production:
+
+The current implementation stores usage in memory. This is fine for a demo, but it is not safe for production because every container has its own memory. If the app scales to multiple replicas, each replica would have a different budget counter.
+
+A production version should store budget usage in Redis so all replicas share the same budget state.
+
+Redis-based implementation idea:
+
+    import os
+    import redis
+    from datetime import datetime
+
+    r = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+
+    def check_budget(user_id: str, estimated_cost: float) -> bool:
+        month_key = datetime.now().strftime("%Y-%m")
+        key = f"budget:{user_id}:{month_key}"
+
+        current = float(r.get(key) or 0)
+
+        if current + estimated_cost > 10:
+            return False
+
+        pipe = r.pipeline()
+        pipe.incrbyfloat(key, estimated_cost)
+        pipe.expire(key, 32 * 24 * 3600)
+        pipe.execute()
+
+        return True
+
+Conclusion: cost guard prevents unexpected LLM spending by checking estimated cost before processing requests and tracking usage in shared storage such as Redis.
